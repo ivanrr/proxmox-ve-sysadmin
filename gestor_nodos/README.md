@@ -36,7 +36,7 @@ Creado por **Iván Romero**.
 2. Descarga el script directamente desde tu repositorio:
 
 ```bash
-wget https://raw.githubusercontent.com/TU_USUARIO/TU_REPOSITORIO/main/gestor_nodos/gestor_nodos.sh
+wget https://raw.githubusercontent.com/ivanrr/proxmox-ve-sysadmin/main/gestor_nodos/gestor_nodos.sh
 ```
 *(Asegúrate de cambiar `TU_USUARIO/TU_REPOSITORIO` por tu ruta real de GitHub).*
 
