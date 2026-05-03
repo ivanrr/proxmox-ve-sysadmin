@@ -38,7 +38,6 @@ Creado por **Iván Romero**.
 ```bash
 wget https://raw.githubusercontent.com/ivanrr/proxmox-ve-sysadmin/main/gestor_nodos/gestor_nodos.sh
 ```
-*(Asegúrate de cambiar `TU_USUARIO/TU_REPOSITORIO` por tu ruta real de GitHub).*
 
 3. Dale permisos de ejecución:
 

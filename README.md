@@ -6,7 +6,7 @@ Aquí iré publicando las diferentes herramientas y scripts que vaya desarrollan
 
 ## 📂 Catálogo de Herramientas
 
-* 🚀 **Gestor de Nodos (Node Manager)**: Herramienta interactiva para evacuar máquinas, recuperar nodos masivamente, actualizar el clúster y limpiar discos huérfanos.
+* 🚀 [**Gestor de Nodos (Node Manager)**](./gestor_nodos/): Herramienta interactiva para evacuar máquinas, recuperar nodos masivamente, actualizar el clúster y limpiar discos huérfanos.
 * ⏳ *Más scripts próximamente...*
 
 ---
