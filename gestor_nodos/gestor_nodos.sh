@@ -2,7 +2,7 @@
 
 # =================================================================
 # GESTOR DE NODOS PROXMOX - SINCRONIZACIÓN TOTAL & VISIBILIDAD
-# Autor: CROsVIGO - Iván Romero
+# Autor: Iván Romero
 # =================================================================
 
 # 1. PERSISTENCIA DE SESIÓN TMUX
@@ -206,7 +206,7 @@ cargar_idioma() {
         L_NO_MONITOR="No, just monitor log"
         L_LOCK_CLEARED="Lock cleared safely. Loading menu..."
         L_MAIN_TITLE="PROXMOX NODE MANAGER"
-        L_AUTHOR="By CROsVIGO - Iván Romero"
+        L_AUTHOR="By Iván Romero"
         L_LOCAL_NODE="Connected local node"
         L_OPT_1="Node Maintenance"
         L_OPT_2="Bring back VM"
@@ -373,7 +373,7 @@ cargar_idioma() {
         L_NO_MONITOR="No, solo monitorizar el log"
         L_LOCK_CLEARED="Bloqueo eliminado limpiamente. Cargando menú..."
         L_MAIN_TITLE="GESTOR DE NODOS PROXMOX"
-        L_AUTHOR="By CROsVIGO - Iván Romero"
+        L_AUTHOR="By Iván Romero"
         L_LOCAL_NODE="Nodo local conectado"
         L_OPT_1="Mantenimiento de Nodo"
         L_OPT_2="Volver a traer VM"
@@ -1917,7 +1917,7 @@ while true; do
     clear
     echo "==================================================="
     echo "          ⚙️  $L_MAIN_TITLE (v$VERSION)"
-    echo -e "          \e[36mBy CROsVIGO - Iván Romero\e[0m"
+    echo -e "          \e[36mBy Iván Romero\e[0m"
     echo "==================================================="
     echo "  📍 $L_LOCAL_NODE: $NODO_LOCAL"
     echo "---------------------------------------------------"
