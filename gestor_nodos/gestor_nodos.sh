@@ -20,6 +20,16 @@ SSH_OPTS="-q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Conn
 
 touch "$ARCHIVO_LOG" 2>/dev/null
 
+# Limpieza automática de eventos con más de 30 días de antigüedad
+if [ -f "$ARCHIVO_LOG" ]; then
+    limite=$(date -d "30 days ago" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
+    if [ -n "$limite" ]; then
+        awk -F'|' -v limit="$limite" '{
+            if (length($1) >= 19 && $1 >= limit) print $0
+        }' "$ARCHIVO_LOG" > "${ARCHIVO_LOG}.tmp" && mv "${ARCHIVO_LOG}.tmp" "$ARCHIVO_LOG"
+    fi
+fi
+
 instalar_dependencias() {
     for dep in jq tmux; do
         if ! command -v "$dep" &> /dev/null; then 
@@ -127,6 +137,10 @@ cargar_idioma() {
         L_LOGIN_OTHER="Log in to another cluster node and"
         L_SELECT_THERE="select it from there."
         L_VMS_NO_REPL="VMS WITHOUT REPLICATION DETECTED"
+        L_VMS_NEED_CALC="VMS NEEDING DESTINATION (No replication or target RAM >90%)"
+        L_REASON="REASON"
+        L_NO_REPL="No Repl."
+        L_RAM_FULL="RAM Full"
         L_CALC_DEST="Calculating optimal destinations based on storage..."
         L_NAME="NAME"
         L_PROPOSAL="PROPOSAL"
@@ -143,6 +157,10 @@ cargar_idioma() {
         L_UPGRADE_APT="Update (apt)"
         L_YES_DIST="YES (dist-upgrade)"
         L_CONCURRENCY="MIGRATION CONCURRENCY"
+        L_CONC_SINGLE="1 global task (Safest, no bandwidth saturation)"
+        L_CONC_SMART="Smart (1 task per distinct destination/source node)"
+        L_CONC_MANUAL="Manual (Specify exact number of tasks)"
+        L_SMART="SMART"
         L_HOW_MANY_SIM="Specify how many VMs to move at once."
         L_PROC_MAINT="Proceed with maintenance?"
         L_RECOVER_VMS="BRING BACK VM (RECOVER)"
@@ -150,6 +168,8 @@ cargar_idioma() {
         L_CONT_REC="Continue recovering other VMs"
         L_NO_RECORDS="(No automatic records found after maintenance)"
         L_NODES_PENDING="Nodes with pending VMs to return:"
+        L_NO_MANUAL_REPL="(No external VMs replicated to this node were found either)"
+        L_MANUAL_CANDIDATES="External VMs replicated to this node available to bring:"
         L_REC_SELECTION="RECOVERY SELECTION"
         L_SEL_NODE_NAME="Type a node name (e.g. pve1) for its VMs"
         L_SEL_DEST_NAME="Type a destination node (e.g. pve1) for its VMs"
@@ -175,6 +195,13 @@ cargar_idioma() {
         L_FINAL_REC_SUM="FINAL RECOVERY SUMMARY"
         L_ALL_REC_DONE="All pending VMs recovered to their nodes."
         L_SOME_PENDING="Some VMs remain pending for later."
+        L_RAM="RAM"
+        L_DISK="Disks"
+        L_IMPACT_TITLE="TARGET RESOURCES IMPACT"
+        L_FUTURE_RAM="Future Free RAM"
+        L_WARN_EXTRA_DISK="Warning: ~%sGB extra disk required on %s (Unreplicated VMs)"
+        L_ERR_RAM_FULL="ERROR: Some target nodes will exceed 90% RAM usage."
+        L_REDUCE_VMS="Recovery blocked for safety. Please reduce the number of VMs."
         L_ORPHAN_SEARCH="SEARCHING ORPHAN DISKS"
         L_FULL_CLUSTER="FULL CLUSTER"
         L_QUERY_DB="Querying global cluster DB..."
@@ -294,6 +321,10 @@ cargar_idioma() {
         L_LOGIN_OTHER="Inicia sesión en otro nodo del clúster y"
         L_SELECT_THERE="selecciona"
         L_VMS_NO_REPL="VMs SIN REPLICACIÓN DETECTADAS"
+        L_VMS_NEED_CALC="VMs SIN DESTINO SEGURO (Sin replicación o destino RAM >90%)"
+        L_REASON="MOTIVO"
+        L_NO_REPL="Sin Repl."
+        L_RAM_FULL="RAM Llena"
         L_CALC_DEST="Calculando destinos óptimos según almacenamiento..."
         L_NAME="NOMBRE"
         L_PROPOSAL="PROPUESTA"
@@ -310,6 +341,10 @@ cargar_idioma() {
         L_UPGRADE_APT="Actualización (apt)"
         L_YES_DIST="SÍ (dist-upgrade)"
         L_CONCURRENCY="CONCURRENCIA DE MIGRACIÓN"
+        L_CONC_SINGLE="1 tarea global (Más seguro, sin saturación)"
+        L_CONC_SMART="Inteligente (1 tarea por cada nodo destino/origen distinto)"
+        L_CONC_MANUAL="Manual (Indicar número exacto de tareas)"
+        L_SMART="INTELIGENTE"
         L_HOW_MANY_SIM="Indica cuántas VMs deseas mover a la vez."
         L_PROC_MAINT="¿Proceder con el mantenimiento?"
         L_RECOVER_VMS="VOLVER A TRAER VM (RECUPERACIÓN)"
@@ -317,6 +352,8 @@ cargar_idioma() {
         L_CONT_REC="Continuar recuperando otras VMs"
         L_NO_RECORDS="(No se encontraron registros automáticos tras mantenimientos)"
         L_NODES_PENDING="Nodos con VMs pendientes de regresar:"
+        L_NO_MANUAL_REPL="(Tampoco se encontraron VMs externas con replicación hacia este nodo)"
+        L_MANUAL_CANDIDATES="VMs externas replicadas hacia este nodo disponibles para traer:"
         L_REC_SELECTION="SELECCIÓN DE RECUPERACIÓN"
         L_SEL_NODE_NAME="Escribe el nombre de un nodo (ej: pve1) para sus VMs"
         L_SEL_DEST_NAME="Escribe un nodo destino (ej: pve1) para sus VMs"
@@ -342,6 +379,13 @@ cargar_idioma() {
         L_FINAL_REC_SUM="RESUMEN FINAL DE RECUPERACIÓN"
         L_ALL_REC_DONE="Todas las VMs pendientes han sido recuperadas a sus respectivos nodos."
         L_SOME_PENDING="Algunas VMs quedaron pendientes y seguirán registradas para más adelante."
+        L_RAM="RAM"
+        L_DISK="Discos"
+        L_IMPACT_TITLE="IMPACTO EN RECURSOS DE DESTINO"
+        L_FUTURE_RAM="RAM Libre Prevista"
+        L_WARN_EXTRA_DISK="Atención: Se requerirán ~%sGB extra en %s (VMs sin replicación)"
+        L_ERR_RAM_FULL="ERROR: Algunos destinos superarán el 90% de uso de RAM."
+        L_REDUCE_VMS="Recuperación bloqueada por seguridad. Reduce la cantidad de VMs."
         L_ORPHAN_SEARCH="BUSCANDO DISCOS HUÉRFANOS"
         L_FULL_CLUSTER="CLÚSTER COMPLETO"
         L_QUERY_DB="Consultando base de datos global del clúster..."
@@ -441,6 +485,9 @@ chequear_hilos_migracion() {
                 rm -f "/tmp/.mig_status_$id" "/tmp/.mig_latest_$id"
             fi
             unset vm_pid[$id]
+            if [ -n "${vm_target_node[$id]}" ]; then
+                unset active_targets["${vm_target_node[$id]}"]
+            fi
             ((jobs_running--))
             ((vms_done++))
         fi
@@ -472,7 +519,7 @@ dibujar_dashboard_migracion() {
 registrar_log() {
     local status=$1
     local message=$2
-    echo "$(date '+%d/%m %H:%M')|$NODO_LOCAL|$status|$message" >> "$ARCHIVO_LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S')|$NODO_LOCAL|$status|$message" >> "$ARCHIVO_LOG"
 }
 
 mostrar_historial_cluster() {
@@ -502,11 +549,11 @@ mostrar_historial_cluster() {
     echo "===============================================================================" > "$formatted_log"
     echo "      📜 $L_GLOBAL_LOG" >> "$formatted_log"
     echo "===============================================================================" >> "$formatted_log"
-    printf " \e[1m%-11s | %-8s | %-7s | %-40s\e[0m\n" "$L_DATE" "$L_NODE" "$L_STATE" "$L_DETAIL" >> "$formatted_log"
+    printf " \e[1m%-19s | %-10s | %-7s | %-40s\e[0m\n" "$L_DATE" "$L_NODE" "$L_STATE" "$L_DETAIL" >> "$formatted_log"
     echo "-------------------------------------------------------------------------------" >> "$formatted_log"
     
     # Quitamos el límite 'tail' para ver todo y lo volcamos al archivo de diseño temporal
-    sort -k1.4,1.5n -k1.1,1.2n -k2 "$temp_cluster_log" | while IFS='|' read -r fecha nodo estado mensaje; do
+    sort "$temp_cluster_log" | while IFS='|' read -r fecha nodo estado mensaje; do
         local color="\e[0m"
         case "$estado" in
             "OK"|"DONE") color="\e[32m" ;;
@@ -514,7 +561,7 @@ mostrar_historial_cluster() {
             "INFO"|"SYS") color="\e[34m" ;;
             "REBOOT"|"MIGRATE") color="\e[33m" ;;
         esac
-        printf " %-11s | %-8s | ${color}%-7s\e[0m | %-40s\n" "$fecha" "$nodo" "$estado" "$mensaje" >> "$formatted_log"
+        printf " %-19s | %-10s | ${color}%-7s\e[0m | %-40s\n" "$fecha" "$nodo" "$estado" "$mensaje" >> "$formatted_log"
     done
     
     # Abrimos con less. -R (colores), -S (no corta líneas), -P (Fija los títulos en barra inferior)
@@ -528,7 +575,10 @@ mostrar_historial_cluster() {
 # =================================================================
 
 ejecutar_mantenimiento() {
-    local objetivo=$1; local plan=$2; local simultaneas=$3; shift 3; local vms=("$@")
+    local objetivo=$1; local plan=$2; local simultaneas=$3; local mode_concurrency=$4; shift 4; local vms=("$@")
+    
+    local sim_display="$simultaneas"
+    if [[ "$mode_concurrency" == "2" ]]; then sim_display="$L_SMART"; fi
     
     local ip_objetivo=$(obtener_ip_nodo "$objetivo")
     if [ -z "$ip_objetivo" ]; then
@@ -572,20 +622,55 @@ ejecutar_mantenimiento() {
         local vms_done=0
         local -a pending_vms=("${vms[@]}")
         local -A vm_pid
+        local -A active_targets=()
+        local -A vm_target_node=()
 
         printf "\e[2J\e[H" # Limpiar pantalla completa y reubicar cursor
 
         while [ $vms_done -lt ${#vms[@]} ]; do
             # 1. Lanzar nuevos trabajos si hay hueco en la concurrencia
             while [ $jobs_running -lt $simultaneas ] && [ ${#pending_vms[@]} -gt 0 ]; do
-                local vmid="${pending_vms[0]}"
-                pending_vms=("${pending_vms[@]:1}") # Sacar el primero de la cola
+                local target_found=false
+                local selected_idx=0
+                local vmid=""
+                local target=""
+                
+                for i in "${!pending_vms[@]}"; do
+                    vmid="${pending_vms[$i]}"
+                    target=$(grep "^$vmid:" "/etc/pve/.gestor_targets_$objetivo" 2>/dev/null | cut -d':' -f2)
+                    if [ -z "$target" ]; then
+                        target=$(pvesh get /cluster/replication --output-format json 2>/dev/null | jq -r ".[] | select((.guest | tostring) == \"$vmid\") | .target" 2>/dev/null | head -n 1)
+                        if [ -z "$target" ]; then target=$(obtener_nodo_alternativo "$objetivo"); fi
+                    fi
+                    
+                    if [[ "$mode_concurrency" == "2" ]]; then
+                        if [ -z "${active_targets[$target]}" ]; then
+                            target_found=true
+                            selected_idx=$i
+                            break
+                        fi
+                    else
+                        target_found=true
+                        selected_idx=$i
+                        break
+                    fi
+                done
+                
+                if ! $target_found; then
+                    break # No se pueden programar más simultáneas sin solaparse
+                fi
+                
+                vmid="${pending_vms[$selected_idx]}"
+                pending_vms=("${pending_vms[@]:0:$selected_idx}" "${pending_vms[@]:$((selected_idx + 1))}")
+                vm_target_node[$vmid]=$target
+                active_targets[$target]=1
                 
                 # SEGURIDAD: Comprobar bloqueo antes de intentar moverla
                 local is_locked=$(pvesh get /nodes/$objetivo/qemu/$vmid/config --output-format json 2>/dev/null | jq -r '.lock // empty')
                 if [ -n "$is_locked" ]; then
                     vm_status[$vmid]="⚠️  $L_BLOCKED ($is_locked)"
                     registrar_log "WARN" "Migración de VM $vmid omitida por bloqueo ($is_locked)"
+                    unset active_targets[$target]
                     ((vms_done++))
                     continue
                 fi
@@ -625,7 +710,7 @@ ejecutar_mantenimiento() {
             done
 
             chequear_hilos_migracion
-            dibujar_dashboard_migracion "🚀 $L_EVAC_PROG: $objetivo" "$simultaneas" "${vms[@]}"
+            dibujar_dashboard_migracion "🚀 $L_EVAC_PROG: $objetivo" "$sim_display" "${vms[@]}"
             echo -e "  [ $L_PRESS_C ]\e[K"
             echo -e "-----------------------------------------------------------------------------------------\e[K"
             echo -e "\e[J\c" # Limpia restos si la terminal se redimensiona
@@ -650,19 +735,53 @@ ejecutar_mantenimiento() {
 
         if [ ${#reintentos[@]} -gt 0 ]; then
             vms_done=0; jobs_running=0; pending_vms=("${reintentos[@]}"); vm_pid=()
+            active_targets=(); vm_target_node=()
             
             printf "\e[2J\e[H"
 
             while [ $vms_done -lt ${#reintentos[@]} ]; do
                 while [ $jobs_running -lt $simultaneas ] && [ ${#pending_vms[@]} -gt 0 ]; do
-                    local vmid="${pending_vms[0]}"
-                    pending_vms=("${pending_vms[@]:1}")
+                    local target_found=false
+                    local selected_idx=0
+                    local vmid=""
+                    local target=""
+                    
+                    for i in "${!pending_vms[@]}"; do
+                        vmid="${pending_vms[$i]}"
+                        target=$(grep "^$vmid:" "/etc/pve/.gestor_targets_$objetivo" 2>/dev/null | cut -d':' -f2)
+                        if [ -z "$target" ]; then
+                            target=$(pvesh get /cluster/replication --output-format json 2>/dev/null | jq -r ".[] | select((.guest | tostring) == \"$vmid\") | .target" 2>/dev/null | head -n 1)
+                            if [ -z "$target" ]; then target=$(obtener_nodo_alternativo "$objetivo"); fi
+                        fi
+                        
+                        if [[ "$mode_concurrency" == "2" ]]; then
+                            if [ -z "${active_targets[$target]}" ]; then
+                                target_found=true
+                                selected_idx=$i
+                                break
+                            fi
+                        else
+                            target_found=true
+                            selected_idx=$i
+                            break
+                        fi
+                    done
+                    
+                    if ! $target_found; then
+                        break
+                    fi
+                    
+                    vmid="${pending_vms[$selected_idx]}"
+                    pending_vms=("${pending_vms[@]:0:$selected_idx}" "${pending_vms[@]:$((selected_idx + 1))}")
+                    vm_target_node[$vmid]=$target
+                    active_targets[$target]=1
                     
                     # SEGURIDAD: Comprobar bloqueo en el reintento
                     local is_locked=$(pvesh get /nodes/$objetivo/qemu/$vmid/config --output-format json 2>/dev/null | jq -r '.lock // empty')
                     if [ -n "$is_locked" ]; then
                         vm_status[$vmid]="⚠️  $L_BLOCKED ($is_locked)"
                         registrar_log "WARN" "REINTENTO: VM $vmid sigue bloqueada ($is_locked)"
+                        unset active_targets[$target]
                         ((vms_done++))
                         continue
                     fi
@@ -720,7 +839,7 @@ ejecutar_mantenimiento() {
 
                 printf "\e[1;1H"
                 echo -e "=========================================================================================\e[K"
-                echo -e "      ⚠️  $L_RETRY_EVAC: $objetivo ($L_SIMULTANEOUS: $simultaneas)\e[K"
+                echo -e "      ⚠️  $L_RETRY_EVAC: $objetivo ($L_SIMULTANEOUS: $sim_display)\e[K"
                 echo -e "=========================================================================================\e[K"
                 for id in "${vms[@]}"; do
                     local extra=""
@@ -1041,30 +1160,48 @@ modulo_mantenimiento() {
     local repl_json=$(pvesh get /cluster/replication --output-format json 2>/dev/null)
     local res_json=$(pvesh get /cluster/resources --output-format json 2>/dev/null)
     
+    local -A orphan_reason=()
     if $do_mig && [ ${#vms[@]} -gt 0 ]; then
+        local -A rep_committed_ram=()
         for vmid in "${vms[@]}"; do
             local target=$(echo "$repl_json" | jq -r ".[] | select((.guest | tostring) == \"$vmid\") | .target" 2>/dev/null | head -n 1)
             if [ -n "$target" ]; then
-                target_map[$vmid]=$target
-                vms_final+=("$vmid")
+                local vm_maxmem=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxmem // 0" 2>/dev/null)
+                local t_maxmem=$(echo "$res_json" | jq -r ".[] | select(.type == \"node\" and .node == \"$target\") | .maxmem // 0" 2>/dev/null)
+                local t_allocated=$(echo "$res_json" | jq -r "[.[] | select(.type == \"qemu\" and .node == \"$target\") | .maxmem // 0] | add // 0" 2>/dev/null)
+                
+                local c_ram=${rep_committed_ram[$target]:-0}
+                local future_allocated=$(( t_allocated + c_ram + vm_maxmem ))
+                local limit=$(( t_maxmem * 9 / 10 ))
+                
+                if [ "$t_maxmem" -gt 0 ] && [ "$future_allocated" -gt "$limit" ]; then
+                    orphan_vms+=("$vmid") # RAM destino saturada (>90%), calculamos destino alternativo
+                    orphan_reason[$vmid]="$L_RAM_FULL ($target)"
+                else
+                    target_map[$vmid]=$target
+                    vms_final+=("$vmid")
+                    rep_committed_ram[$target]=$(( c_ram + vm_maxmem ))
+                fi
             else
                 orphan_vms+=("$vmid")
+                orphan_reason[$vmid]="$L_NO_REPL"
             fi
         done
         
         if [ ${#orphan_vms[@]} -gt 0 ]; then
             clear
             echo "==================================================="
-            echo "      ⚠️  $L_VMS_NO_REPL"
+            echo "      ⚠️  $L_VMS_NEED_CALC"
             echo "==================================================="
             echo "  $L_CALC_DEST"
             echo "---------------------------------------------------"
-            printf "  %-5s | %-15s | %-12s | %-7s | %-8s | %-10s | %s\n" "VMID" "$L_NAME" "DATASTORE(S)" "RAM" "LOCAL" "$L_PROPOSAL" "$L_REMAINING"
+            printf "  %-5s | %-15s | %-16s | %-7s | %-8s | %-10s | %s\n" "VMID" "$L_NAME" "$L_REASON" "RAM" "LOCAL" "$L_PROPOSAL" "$L_REMAINING"
             echo "---------------------------------------------------"
             
             local all_nodes=$(obtener_lista_nodos)
             local -A orphan_proposed=()
             local -A committed_ram=()
+            for k in "${!rep_committed_ram[@]}"; do committed_ram[$k]=${rep_committed_ram[$k]}; done
             local -A committed_disk=()
             
             for vmid in "${orphan_vms[@]}"; do
@@ -1198,7 +1335,7 @@ modulo_mantenimiento() {
                 
                 if [ -z "$best_node" ]; then
                     best_node="❌ $L_NO_RESOURCES"
-                    printf "  %-5s | %-15s | %-12s | %-4s GB | %-5s GB | %-10s | %s\n" "$vmid" "${name:0:15}" "${ds_list:0:12}" "$maxmem_gb" "$total_local_gb" "$best_node" "-"
+                    printf "  %-5s | %-15s | %-16s | %-4s GB | %-5s GB | %-10s | %s\n" "$vmid" "${name:0:15}" "${orphan_reason[$vmid]:0:16}" "$maxmem_gb" "$total_local_gb" "$best_node" "-"
                 else
                     orphan_proposed[$vmid]=$best_node
                     committed_ram[$best_node]=$(( ${committed_ram[$best_node]:-0} + maxmem ))
@@ -1209,7 +1346,7 @@ modulo_mantenimiento() {
                             committed_disk["$best_node:$st"]=$(( ${committed_disk["$best_node:$st"]:-0} + req_bytes ))
                         fi
                     done
-                    printf "  %-5s | %-15s | %-12s | %-4s GB | %-5s GB | %-10s | %s\n" "$vmid" "${name:0:15}" "${ds_list:0:12}" "$maxmem_gb" "$total_local_gb" "$best_node" "${final_free_ram_gb}G(${final_free_ram_pct}%) / ${final_free_disk_str}"
+                    printf "  %-5s | %-15s | %-16s | %-4s GB | %-5s GB | %-10s | %s\n" "$vmid" "${name:0:15}" "${orphan_reason[$vmid]:0:16}" "$maxmem_gb" "$total_local_gb" "$best_node" "${final_free_ram_gb}G(${final_free_ram_pct}%) / ${final_free_disk_str}"
                 fi
             done
             
@@ -1253,84 +1390,36 @@ modulo_mantenimiento() {
                 done
             fi
             
-            for vmid in "${orphan_vms[@]}"; do
-                if [[ "${orphan_proposed[$vmid]}" != "❌"* && -n "${orphan_proposed[$vmid]}" ]]; then
-                    target_map[$vmid]=${orphan_proposed[$vmid]}
-                fi
-            done
             echo "---------------------------------------------------"
-            pausa_volver
-        fi
-
-        # SELECCIÓN GLOBAL DE MIGRACIÓN
-        local -A dest_count=()
-        local -a migratable_vms=()
-        for vmid in "${vms[@]}"; do
-            local tgt="${target_map[$vmid]}"
-            if [ -n "$tgt" ] && [[ "$tgt" != "❌"* ]]; then
-                dest_count[$tgt]=$(( ${dest_count[$tgt]:-0} + 1 ))
-                migratable_vms+=("$vmid")
-            fi
-        done
-
-        if [ ${#migratable_vms[@]} -eq 0 ]; then
-            echo "  ❌ $L_NO_VALID_DEST"
-            sleep 2
-            vms=()
-        else
-            # Pre-caché de nombres para evitar lentitud y fallos de jq en el bucle
-            local -A migratable_names
-            for vmid in "${migratable_vms[@]}"; do
-                local name=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .name" 2>/dev/null)
-                if [ -z "$name" ] || [ "$name" == "null" ]; then name="?"; fi
-                migratable_names[$vmid]=$name
-            done
-
-            clear
-            echo "==================================================="
-            echo "      🚀 $L_MIG_SELECTION: $objetivo"
-            echo "==================================================="
-            echo "  $L_DEST_PREV"
-            for dest in "${!dest_count[@]}"; do
-                printf "  - \e[36m%-10s\e[0m : %d VMs\n" "$dest" "${dest_count[$dest]}"
-                for vmid in "${migratable_vms[@]}"; do
-                    if [ "${target_map[$vmid]}" == "$dest" ]; then
-                        printf "      🔸 VM %-5s %-18s : %-12s -> %s\n" "$vmid" "[${migratable_names[$vmid]:0:16}]" "$objetivo" "$dest"
-                    fi
-                done
-            done
-            echo "---------------------------------------------------"
-            echo "  📝 $L_MIG_DECISION"
-            echo "  - $L_SEL_DEST_NAME"
+            echo "   $L_MIG_DECISION"
             echo "  - $L_WRITE_IDS"
             echo "  - $L_WRITE_ALL"
             echo "  - $L_WRITE_ZERO"
             echo "---------------------------------------------------"
-            read -p "  $L_SELECTION: " input_sel
+            read -p "  $L_SELECTION: " orphan_sel
             
-            local -a vms_final=()
-            if [[ "${input_sel,,}" == "all" || "${input_sel,,}" == "todos" ]]; then
-                vms_final=("${migratable_vms[@]}")
-            elif [ -n "${dest_count[$input_sel]}" ]; then
-                for vmid in "${migratable_vms[@]}"; do
-                    if [ "${target_map[$vmid]}" == "$input_sel" ]; then
+            if [[ "${orphan_sel,,}" == "all" || "${orphan_sel,,}" == "todos" ]]; then
+                for vmid in "${orphan_vms[@]}"; do
+                    if [[ -n "${orphan_proposed[$vmid]}" && "${orphan_proposed[$vmid]}" != "❌"* ]]; then
+                        target_map[$vmid]=${orphan_proposed[$vmid]}
                         vms_final+=("$vmid")
                     fi
                 done
-            elif [[ "$input_sel" != "0" && -n "$input_sel" ]]; then
-                for id in $input_sel; do
-                    if [[ " ${migratable_vms[*]} " =~ " $id " ]]; then
+            elif [[ "$orphan_sel" != "0" && -n "$orphan_sel" ]]; then
+                for id in $orphan_sel; do
+                    if [[ -n "${orphan_proposed[$id]}" && "${orphan_proposed[$id]}" != "❌"* ]]; then
+                        target_map[$id]=${orphan_proposed[$id]}
                         vms_final+=("$id")
                     fi
                 done
             fi
-        
-            > "/etc/pve/.gestor_targets_$objetivo"
-            for vmid in "${vms_final[@]}"; do
-                echo "$vmid:${target_map[$vmid]}" >> "/etc/pve/.gestor_targets_$objetivo"
-            done
-            vms=("${vms_final[@]}")
         fi
+
+        > "/etc/pve/.gestor_targets_$objetivo"
+        for vmid in "${vms_final[@]}"; do
+            echo "$vmid:${target_map[$vmid]}" >> "/etc/pve/.gestor_targets_$objetivo"
+        done
+        vms=("${vms_final[@]}")
     fi
 
     # --- VISTA PREVIA ---
@@ -1344,7 +1433,15 @@ modulo_mantenimiento() {
             local name=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .name" 2>/dev/null)
             if [ -z "$name" ]; then name="?"; fi
             local target="${target_map[$vmid]}"
-            printf "    🔸 VM %-5s %-18s : %-12s -> %s\n" "$vmid" "[${name:0:16}]" "$objetivo" "$target"
+            
+            local maxmem=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxmem // 0" 2>/dev/null)
+            local maxdisk=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxdisk // 0" 2>/dev/null)
+            local mem_gb=$((maxmem / 1073741824))
+            local disk_gb=$((maxdisk / 1073741824))
+            if [ "$mem_gb" -eq 0 ] && [ "$maxmem" -gt 0 ]; then mem_gb="<1"; fi
+            if [ "$disk_gb" -eq 0 ] && [ "$maxdisk" -gt 0 ]; then disk_gb="<1"; fi
+
+            printf "    🔸 VM %-5s %-18s : %-12s -> %-10s | %s: %-4s GB | %s: %-5s GB\n" "$vmid" "[${name:0:16}]" "$objetivo" "$target" "$L_RAM" "${mem_gb}" "$L_DISK" "${disk_gb}"
         done
     elif $do_mig; then
         echo "  - $L_VMS_TO_MIG:   0"
@@ -1354,16 +1451,27 @@ modulo_mantenimiento() {
     $do_up  && echo "  - $L_UPGRADE_APT: $L_YES_DIST" || echo "  - $L_UPGRADE_APT: $L_OMITTED"
     
     local simultaneas=1
+    local mode_concurrency=1
     if $do_mig && [ ${#vms[@]} -gt 1 ]; then
         echo "---------------------------------------------------"
         echo "  ⚡ $L_CONCURRENCY"
-        echo "  $L_HOW_MANY_SIM"
+        echo "  1) 🐢 $L_CONC_SINGLE"
+        echo "  2) 🧠 $L_CONC_SMART"
+        echo "  3) 🚀 $L_CONC_MANUAL"
         echo "---------------------------------------------------"
-        read -p "  $L_SIMULTANEOUS (1-${#vms[@]}) [1]: " simultaneas
-        simultaneas=${simultaneas:-1}
-        if [[ ! "$simultaneas" =~ ^[0-9]+$ ]]; then simultaneas=1; fi
-        if [ "$simultaneas" -gt "${#vms[@]}" ]; then simultaneas=${#vms[@]}; fi
-        if [ "$simultaneas" -lt 1 ]; then simultaneas=1; fi
+        read -p "  $L_SELECTION [1/2/3]: " mode_concurrency
+        if [[ "$mode_concurrency" == "3" ]]; then
+            read -p "  $L_SIMULTANEOUS (1-${#vms[@]}): " simultaneas
+            simultaneas=${simultaneas:-1}
+            if [[ ! "$simultaneas" =~ ^[0-9]+$ ]]; then simultaneas=1; fi
+            if [ "$simultaneas" -gt "${#vms[@]}" ]; then simultaneas=${#vms[@]}; fi
+            if [ "$simultaneas" -lt 1 ]; then simultaneas=1; fi
+        elif [[ "$mode_concurrency" == "2" ]]; then
+            simultaneas=${#vms[@]}
+        else
+            mode_concurrency=1
+            simultaneas=1
+        fi
     fi
     
     echo "---------------------------------------------------"
@@ -1382,7 +1490,7 @@ modulo_mantenimiento() {
         echo "${vms_a_guardar[@]}" > "/etc/pve/.vms_origen_$objetivo"
     fi
 
-    ejecutar_mantenimiento "$objetivo" "$plan" "$simultaneas" "${vms[@]}"
+    ejecutar_mantenimiento "$objetivo" "$plan" "$simultaneas" "$mode_concurrency" "${vms[@]}"
 }
 
 modulo_recuperacion() {
@@ -1406,22 +1514,44 @@ modulo_recuperacion() {
         done
     done
 
+        local res_json=$(pvesh get /cluster/resources --output-format json 2>/dev/null)
+        local title_msg="$L_NODES_PENDING"
+        local -a recorded_pending_vms=("${all_pending_vms[@]}")
+
     if [ ${#all_pending_vms[@]} -eq 0 ]; then
-        clear
-        echo "==================================================="
-        echo "      📥 $L_RECOVER_VMS"
-        echo "==================================================="
-        echo "  ✅ $L_NO_PENDING"
-        echo "  $L_NO_RECORDS"
-        pausa_volver
-        return
+            local repl_json=$(pvesh get /cluster/replication --output-format json 2>/dev/null)
+            local repl_to_local=$(echo "$repl_json" | jq -r ".[] | select(.target == \"$NODO_LOCAL\") | .guest" 2>/dev/null)
+            
+            for vmid in $repl_to_local; do
+                local current_node=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .node" 2>/dev/null)
+                if [ -n "$current_node" ] && [ "$current_node" != "null" ] && [ "$current_node" != "$NODO_LOCAL" ]; then
+                    target_map[$vmid]=$NODO_LOCAL
+                    all_pending_vms+=("$vmid")
+                    node_pending_count[$NODO_LOCAL]=$(( ${node_pending_count[$NODO_LOCAL]:-0} + 1 ))
+                fi
+            done
+
+            if [ ${#all_pending_vms[@]} -eq 0 ]; then
+                clear
+                echo "==================================================="
+                echo "      📥 $L_RECOVER_VMS"
+                echo "==================================================="
+                echo "  ✅ $L_NO_PENDING"
+                echo "  $L_NO_RECORDS"
+                echo "  $L_NO_MANUAL_REPL"
+                pausa_volver
+                return
+            else
+                title_msg="$L_MANUAL_CANDIDATES"
+            fi
     fi
 
-    local res_json=$(pvesh get /cluster/resources --output-format json 2>/dev/null)
     local -A pending_vm_names
     pending_vm_names=()
     local -A pending_vm_nodes
     pending_vm_nodes=()
+    local -A pending_vm_ram=()
+    local -A pending_vm_disk=()
     for vmid in "${all_pending_vms[@]}"; do
         local current_node=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .node" 2>/dev/null)
         if [ -z "$current_node" ] || [ "$current_node" == "null" ]; then current_node="?"; fi
@@ -1429,18 +1559,32 @@ modulo_recuperacion() {
         if [ -z "$name" ] || [ "$name" == "null" ]; then name="?"; fi
         pending_vm_names[$vmid]=$name
         pending_vm_nodes[$vmid]=$current_node
+
+        local maxmem=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxmem // 0" 2>/dev/null)
+        local maxdisk=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxdisk // 0" 2>/dev/null)
+        local mem_gb=$((maxmem / 1073741824))
+        local disk_gb=$((maxdisk / 1073741824))
+        if [ "$mem_gb" -eq 0 ] && [ "$maxmem" -gt 0 ]; then mem_gb="<1"; fi
+        if [ "$disk_gb" -eq 0 ] && [ "$maxdisk" -gt 0 ]; then disk_gb="<1"; fi
+        pending_vm_ram[$vmid]=$mem_gb
+        pending_vm_disk[$vmid]=$disk_gb
     done
 
     clear
     echo "==================================================="
     echo "      📥 $L_RECOVER_VMS"
     echo "==================================================="
-    echo "  $L_NODES_PENDING"
+    if [ ${#recorded_pending_vms[@]} -eq 0 ]; then
+        echo "  ✅ $L_NO_PENDING"
+        echo "  $L_NO_RECORDS"
+        echo "---------------------------------------------------"
+    fi
+    echo "  $title_msg"
     for node in "${!node_pending_count[@]}"; do
         printf "  - \e[36m%-10s\e[0m : %d VMs\n" "$node" "${node_pending_count[$node]}"
         for vmid in "${all_pending_vms[@]}"; do
             if [ "${target_map[$vmid]}" == "$node" ]; then
-                printf "      🔸 ID: %-5s | %-18s | %s: %s\n" "$vmid" "[${pending_vm_names[$vmid]:0:16}]" "$L_CURRENT" "${pending_vm_nodes[$vmid]}"
+                printf "      🔸 ID: %-5s | %-18s | %-8s: %-10s | %s: %-4s GB | %s: %-5s GB\n" "$vmid" "[${pending_vm_names[$vmid]:0:16}]" "$L_CURRENT" "${pending_vm_nodes[$vmid]}" "$L_RAM" "${pending_vm_ram[$vmid]}" "$L_DISK" "${pending_vm_disk[$vmid]}"
             fi
         done
     done
@@ -1554,19 +1698,77 @@ modulo_recuperacion() {
         local dest_node="${target_map[$vmid]}"
         local current_node="${pending_vm_nodes[$vmid]}"
         local name="${pending_vm_names[$vmid]}"
-        printf "    🔸 VM %-5s %-18s : %-12s -> %s\n" "$vmid" "[${name:0:16}]" "$current_node" "$dest_node"
+        printf "    🔸 VM %-5s %-18s : %-12s -> %-10s | %s: %-4s GB | %s: %-5s GB\n" "$vmid" "[${name:0:16}]" "$current_node" "$dest_node" "$L_RAM" "${pending_vm_ram[$vmid]}" "$L_DISK" "${pending_vm_disk[$vmid]}"
     done
     echo "---------------------------------------------------"
+
+    local -A rec_req_ram=()
+    local -A rec_req_disk=()
+    
+    for vmid in "${vms[@]}"; do
+        local dest_node="${target_map[$vmid]}"
+        local current_node="${pending_vm_nodes[$vmid]}"
+        if [ "$dest_node" != "$current_node" ]; then
+            local maxmem=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxmem // 0" 2>/dev/null)
+            rec_req_ram[$dest_node]=$(( ${rec_req_ram[$dest_node]:-0} + maxmem ))
+            if [[ " ${vms_orphans[*]} " =~ " ${vmid} " ]]; then
+                local maxdisk=$(echo "$res_json" | jq -r ".[] | select(.id == \"qemu/$vmid\") | .maxdisk // 0" 2>/dev/null)
+                rec_req_disk[$dest_node]=$(( ${rec_req_disk[$dest_node]:-0} + maxdisk ))
+            fi
+        fi
+    done
+
+    echo "  📊 $L_IMPACT_TITLE"
+    local abort_recovery=false
+    local -A dest_impact_nodes=()
+    for vmid in "${vms[@]}"; do dest_impact_nodes[${target_map[$vmid]}]=1; done
+
+    for n in "${!dest_impact_nodes[@]}"; do
+        local n_maxmem=$(echo "$res_json" | jq -r ".[] | select(.type == \"node\" and .node == \"$n\") | .maxmem // 0" 2>/dev/null)
+        local n_allocated_ram=$(echo "$res_json" | jq -r "[.[] | select(.type == \"qemu\" and .node == \"$n\") | .maxmem // 0] | add // 0" 2>/dev/null)
+        local c_ram=${rec_req_ram[$n]:-0}
+        local future_ram=$((n_maxmem - n_allocated_ram - c_ram))
+        local future_ram_gb=$((future_ram / 1073741824))
+        local future_ram_pct=$(( n_maxmem > 0 ? (future_ram * 100 / n_maxmem) : 0 ))
+        local color_ram="\e[32m"
+        if [ "$future_ram_pct" -lt 10 ]; then color_ram="\e[31m"; abort_recovery=true; fi
+        printf "  ► %-10s %s: ${color_ram}%sG (%s%%)\e[0m\n" "$n" "$L_FUTURE_RAM" "$future_ram_gb" "$future_ram_pct"
+        local c_disk=${rec_req_disk[$n]:-0}
+        if [ "$c_disk" -gt 0 ]; then
+            local c_disk_gb=$((c_disk / 1073741824))
+            printf "    └─ ⚠️  $L_WARN_EXTRA_DISK\n" "$c_disk_gb" "$n"
+        fi
+    done
+    echo "---------------------------------------------------"
+
+    if $abort_recovery; then
+        echo -e "  ❌ \e[31m$L_ERR_RAM_FULL\e[0m"
+        echo "  $L_REDUCE_VMS"
+        pausa_volver
+        continue
+    fi
+
     local simultaneas=1
+    local mode_concurrency=1
     if [ ${#vms[@]} -gt 1 ]; then
         echo "  ⚡ $L_CONCURRENCY"
-        echo "  $L_HOW_MANY_BRING"
+        echo "  1) 🐢 $L_CONC_SINGLE"
+        echo "  2) 🧠 $L_CONC_SMART"
+        echo "  3) 🚀 $L_CONC_MANUAL"
         echo "---------------------------------------------------"
-        read -p "  $L_SIMULTANEOUS (1-${#vms[@]}) [1]: " simultaneas
-        simultaneas=${simultaneas:-1}
-        if [[ ! "$simultaneas" =~ ^[0-9]+$ ]]; then simultaneas=1; fi
-        if [ "$simultaneas" -gt "${#vms[@]}" ]; then simultaneas=${#vms[@]}; fi
-        if [ "$simultaneas" -lt 1 ]; then simultaneas=1; fi
+        read -p "  $L_SELECTION [1/2/3]: " mode_concurrency
+        if [[ "$mode_concurrency" == "3" ]]; then
+            read -p "  $L_SIMULTANEOUS (1-${#vms[@]}): " simultaneas
+            simultaneas=${simultaneas:-1}
+            if [[ ! "$simultaneas" =~ ^[0-9]+$ ]]; then simultaneas=1; fi
+            if [ "$simultaneas" -gt "${#vms[@]}" ]; then simultaneas=${#vms[@]}; fi
+            if [ "$simultaneas" -lt 1 ]; then simultaneas=1; fi
+        elif [[ "$mode_concurrency" == "2" ]]; then
+            simultaneas=${#vms[@]}
+        else
+            mode_concurrency=1
+            simultaneas=1
+        fi
     fi
     pedir_confirmacion "$L_START_REC_Q" || continue
 
@@ -1583,25 +1785,61 @@ modulo_recuperacion() {
     local vms_done=0
     local -a pending_vms=("${vms[@]}")
     local -A vm_pid
+    local -A active_targets=()
+    local -A vm_target_node=()
+    
+    local sim_display="$simultaneas"
+    if [[ "$mode_concurrency" == "2" ]]; then sim_display="$L_SMART"; fi
 
     printf "\e[2J\e[H"
 
     while [ $vms_done -lt ${#vms[@]} ]; do
         while [ $jobs_running -lt $simultaneas ] && [ ${#pending_vms[@]} -gt 0 ]; do
-            local vmid="${pending_vms[0]}"
-            pending_vms=("${pending_vms[@]:1}")
+            local target_found=false
+            local selected_idx=0
+            local vmid=""
+            local current_node=""
+            
+            for i in "${!pending_vms[@]}"; do
+                vmid="${pending_vms[$i]}"
+                current_node=$(pvesh get /cluster/resources --output-format json 2>/dev/null | jq -r ".[] | select(.id == \"qemu/$vmid\") | .node" 2>/dev/null)
+                
+                if [[ "$mode_concurrency" == "2" ]]; then
+                    if [ -z "${active_targets[$current_node]}" ]; then
+                        target_found=true
+                        selected_idx=$i
+                        break
+                    fi
+                else
+                    target_found=true
+                    selected_idx=$i
+                    break
+                fi
+            done
+            
+            if ! $target_found; then
+                break
+            fi
+            
+            vmid="${pending_vms[$selected_idx]}"
+            pending_vms=("${pending_vms[@]:0:$selected_idx}" "${pending_vms[@]:$((selected_idx + 1))}")
+            
+            current_node=$(pvesh get /cluster/resources --output-format json 2>/dev/null | jq -r ".[] | select(.id == \"qemu/$vmid\") | .node" 2>/dev/null)
+            vm_target_node[$vmid]=$current_node
+            active_targets[$current_node]=1
             
             local dest_node="${target_map[$vmid]}"
-            local current_node=$(pvesh get /cluster/resources --output-format json 2>/dev/null | jq -r ".[] | select(.id == \"qemu/$vmid\") | .node" 2>/dev/null)
             
             if [ -z "$current_node" ]; then
                 vm_status[$vmid]="❌ $L_NOT_FOUND"
+                unset active_targets[$current_node]
                 ((vms_done++))
                 continue
             fi
             
             if [ "$current_node" == "$dest_node" ]; then
                 vm_status[$vmid]="✅ $L_ALREADY_HERE"
+                unset active_targets[$current_node]
                 ((vms_done++))
                 continue
             fi
@@ -1610,6 +1848,7 @@ modulo_recuperacion() {
             if [ -n "$is_locked" ]; then
                 vm_status[$vmid]="⚠️  $L_BLOCKED ($is_locked)"
                 registrar_log "WARN" "Recuperación de VM $vmid omitida ($is_locked)"
+                unset active_targets[$current_node]
                 ((vms_done++))
                 continue
             fi
@@ -1617,6 +1856,7 @@ modulo_recuperacion() {
             local ip_current=$(obtener_ip_nodo "$current_node")
             if [ -z "$ip_current" ]; then
                 vm_status[$vmid]="❌ Error IP de $current_node"
+                unset active_targets[$current_node]
                 ((vms_done++))
                 continue
             fi
@@ -1655,7 +1895,7 @@ modulo_recuperacion() {
         done
 
         chequear_hilos_migracion
-        dibujar_dashboard_migracion "📥 $L_REC_PROG" "$simultaneas" "${vms[@]}"
+        dibujar_dashboard_migracion "📥 $L_REC_PROG" "$sim_display" "${vms[@]}"
         
         echo -e "  [ $L_PRESS_C ]\e[K"
         echo -e "-----------------------------------------------------------------------------------------\e[K"
@@ -1689,13 +1929,15 @@ modulo_recuperacion() {
 
     local -A new_node_vms
     for vmid in "${all_pending_vms[@]}"; do
-        local t_node="${target_map[$vmid]}"
-        if [[ ! " ${vms[*]} " =~ " ${vmid} " ]]; then
-            new_node_vms[$t_node]+="$vmid "
-        else
-            if [[ "${vm_status[$vmid]}" != "✅ $L_COMPLETED" && "${vm_status[$vmid]}" != "✅ $L_ALREADY_HERE" ]]; then
-                new_node_vms[$t_node]+="$vmid "
-            fi
+            if [[ " ${recorded_pending_vms[*]} " =~ " ${vmid} " ]]; then
+                local t_node="${target_map[$vmid]}"
+                if [[ ! " ${vms[*]} " =~ " ${vmid} " ]]; then
+                    new_node_vms[$t_node]+="$vmid "
+                else
+                    if [[ "${vm_status[$vmid]}" != "✅ $L_COMPLETED" && "${vm_status[$vmid]}" != "✅ $L_ALREADY_HERE" ]]; then
+                        new_node_vms[$t_node]+="$vmid "
+                    fi
+                fi
         fi
     done
 
