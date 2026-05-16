@@ -32,7 +32,7 @@ El *Bulk Migrate* de la interfaz web de Proxmox es útil si necesitas mover máq
 
 - Un clúster funcional de Proxmox VE (versión 7.x o superior recomendada).
 - Acceso `root` mediante SSH a los nodos.
-- No requiere instalar nada manualmente (el propio script instala `jq` y `tmux` si detecta que faltan).
+- No requiere instalar nada manualmente (el propio script instala `jq` si detecta que faltan).
 
 ---
 
@@ -40,27 +40,15 @@ El *Bulk Migrate* de la interfaz web de Proxmox es útil si necesitas mover máq
 
 1. Inicia sesión por SSH en cualquier nodo de tu clúster Proxmox.
 2. Ubícate en el directorio de binarios locales (para poder ejecutarlo desde cualquier lugar):
-
-```bash
-cd /usr/local/sbin
-```
-
 3. Descarga el script directamente desde tu repositorio:
-
-```bash
-wget https://raw.githubusercontent.com/ivanrr/proxmox-ve-sysadmin/main/gestor_nodos/gestor_nodos.sh
-```
-
 3. Dale permisos de ejecución:
-
-```bash
-chmod +x gestor_nodos.sh
-```
-
 4. ¡Ejecútalo!
-
 ```bash
-./gestor_nodos.sh
+apt install tmux
+cd /usr/local/sbin
+wget https://raw.githubusercontent.com/ivanrr/proxmox-ve-sysadmin/main/gestor_nodos/gestor_nodos.sh
+chmod +x gestor_nodos.sh
+gestor_nodos.sh
 ```
 
 El script te preguntará tu idioma preferido la primera vez que lo inicies.
